@@ -23,11 +23,12 @@ def get_subscriptions():
     return data
 
 def get_plans(subscription_id: str):
-    url = f"{BASE_URL}/v1/Plan/GetPlanInfoForSubscription"
-    params = {"subscriptionId": subscription_id}
-    response = requests.get(url, headers=headers, params=params)
+    # Use subscriptionId as part of the path, not as ?subscriptionId=...
+    url = f"{BASE_URL}/v1/Plan/GetPlanInfoForSubscription/{subscription_id}"
+    response = requests.get(url, headers=headers)
 
     print("\n=== Plans for subscription ===")
+    print("URL:", response.url)
     print("Status Code:", response.status_code)
     print("Raw Response:", response.text)
     response.raise_for_status()
