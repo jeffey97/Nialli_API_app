@@ -1,10 +1,9 @@
-import requests
 import json
 import base64
 import time
 
 BASE_URL = "https://nvpapi.test.nialli.com"
-ACCESS_TOKEN = "yJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCIsImtpZCI6IlRCWWEwSTBSeEtMU2Nxb1BnUDBHVSJ9.eyJodHRwOi8vc2NoZW1hcy5taWNyb3NvZnQuY29tL3dzLzIwMDgvMDYvaWRlbnRpdHkvY2xhaW1zL3JvbGUiOltdLCJodHRwczovL2xvY2FsaG9zdDo0NDQzNi9lbWFpbCI6Im1hcmt1cy5hbWFsYW5hdGhhbkBhZGlkZXZlbG9wbWVudHMuY29tIiwiYXV0aGVudGljYXRlZGVtYWlsIjoibWFya3VzLmFtYWxhbmF0aGFuQGFkaWRldmVsb3BtZW50cy5jb20iLCJhdXRoZW50aWNhdGVkLmVtYWlsIjoibWFya3VzLmFtYWxhbmF0aGFuQGFkaWRldmVsb3BtZW50cy5jb20iLCJhdXRoZW50aWNhdGVkLnVzZXJpZCI6ImF1dGgwfDY3MzRjOTQ3MTQxNTlhZmQxMTFhZjJiMCIsImlzcyI6Imh0dHBzOi8vbmlhbGxpLXRlc3QudXMuYXV0aDAuY29tLyIsInN1YiI6ImF1dGgwfDY3MzRjOTQ3MTQxNTlhZmQxMTFhZjJiMCIsImF1ZCI6Imh0dHBzOi8vbnZwYXBpLnRlc3QubmlhbGxpLmNvbS8iLCJpYXQiOjE3NjMxNzIwMjgsImV4cCI6MTc2MzI1ODQyOCwiZ3R5IjoicGFzc3dvcmQiLCJhenAiOiJlY2JMbWFxa0RpUkVjOG5xaEFPbjNZMnJyeTFadUxLUyIsInBlcm1pc3Npb25zIjpbInN1YnNjcmlwdGlvbjpnZXQiXX0.LZYMLhI5bpC8Wj3KXg5ZRQKJ4vqTykPbKLH28gbRt53M6iJaocuCpxAG5piApaTVwITlQTiCwDvgozlT-uW76ax7deBKSGhK3r0Ix-QBJkzi8nSUdxe8TmbaF4yRBec91AHljIUKGz1ZyNP2-_SGTc6ZZ73zmcFY_TFQ4KGdbqq0ZhWg_sY2a5Aw9eqB2PRMupCWdpScLVl16Yp4_Vk8DEFkGa_9OlDESwyV-CZmzgGB602FzAvKheV5eYW3EcYp6E1v6oRFX_AbzUdH5_FDwp6xJvbGWykPya9qMAgwWWtBlCbcoNUSKSZdjmJnlI6cjSiNk8vxQDXmk6u0z_TpaA"
+ACCESS_TOKEN = "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCIsImtpZCI6IlRCWWEwSTBSeEtMU2Nxb1BnUDBHVSJ9.eyJodHRwOi8vc2NoZW1hcy5taWNyb3NvZnQuY29tL3dzLzIwMDgvMDYvaWRlbnRpdHkvY2xhaW1zL3JvbGUiOltdLCJodHRwczovL2xvY2FsaG9zdDo0NDQzNi9lbWFpbCI6Im1hcmt1cy5hbWFsYW5hdGhhbkBhZGlkZXZlbG9wbWVudHMuY29tIiwiYXV0aGVudGljYXRlZGVtYWlsIjoibWFya3VzLmFtYWxhbmF0aGFuQGFkaWRldmVsb3BtZW50cy5jb20iLCJhdXRoZW50aWNhdGVkLmVtYWlsIjoibWFya3VzLmFtYWxhbmF0aGFuQGFkaWRldmVsb3BtZW50cy5jb20iLCJhdXRoZW50aWNhdGVkLnVzZXJpZCI6ImF1dGgwfDY3MzRjOTQ3MTQxNTlhZmQxMTFhZjJiMCIsImlzcyI6Imh0dHBzOi8vbmlhbGxpLXRlc3QudXMuYXV0aDAuY29tLyIsInN1YiI6ImF1dGgwfDY3MzRjOTQ3MTQxNTlhZmQxMTFhZjJiMCIsImF1ZCI6Imh0dHBzOi8vbnZwYXBpLnRlc3QubmlhbGxpLmNvbS8iLCJpYXQiOjE3NjMxNzIwMjgsImV4cCI6MTc2MzI1ODQyOCwiZ3R5IjoicGFzc3dvcmQiLCJhenAiOiJlY2JMbWFxa0RpUkVjOG5xaEFPbjNZMnJyeTFadUxLUyIsInBlcm1pc3Npb25zIjpbInN1YnNjcmlwdGlvbjpnZXQiXX0.LZYMLhI5bpC8Wj3KXg5ZRQKJ4vqTykPbKLH28gbRt53M6iJaocuCpxAG5piApaTVwITlQTiCwDvgozlT-uW76ax7deBKSGhK3r0Ix-QBJkzi8nSUdxe8TmbaF4yRBec91AHljIUKGz1ZyNP2-_SGTc6ZZ73zmcFY_TFQ4KGdbqq0ZhWg_sY2a5Aw9eqB2PRMupCWdpScLVl16Yp4_Vk8DEFkGa_9OlDESwyV-CZmzgGB602FzAvKheV5eYW3EcYp6E1v6oRFX_AbzUdH5_FDwp6xJvbGWykPya9qMAgwWWtBlCbcoNUSKSZdjmJnlI6cjSiNk8vxQDXmk6u0z_TpaA"
 
 headers = {
     "Authorization": f"Bearer {ACCESS_TOKEN}",
@@ -50,7 +49,7 @@ def get_subscriptions():
     
     try:
         print(f"Making GET request to: {url}")
-        response = requests.get(url, headers=headers, timeout=10)
+        response = test_nialli2.get(url, headers=headers, timeout=10)
         
         print("\n" + "=" * 60)
         print("RESPONSE")
@@ -81,12 +80,12 @@ def get_subscriptions():
         else:
             print(f"\n⚠️  Request failed with status {response.status_code}")
             
-    except requests.exceptions.Timeout:
+    except test_nialli2.exceptions.Timeout:
         print("❌ Request timed out - The server took too long to respond")
-    except requests.exceptions.ConnectionError as e:
+    except test_nialli2.exceptions.ConnectionError as e:
         print(f"❌ Connection failed: {e}")
         print("   Check your internet connection and that the API server is accessible")
-    except requests.exceptions.RequestException as e:
+    except test_nialli2.exceptions.RequestException as e:
         print(f"❌ Request failed: {e}")
 
 if __name__ == "__main__":
