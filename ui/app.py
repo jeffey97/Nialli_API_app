@@ -67,14 +67,30 @@ if not subs:
     st.error("No subscriptions found.")
     st.stop()
 
-sub_options = {
-    f'{s.get("subscriptionName", "Unnamed")} ({s.get("subscriptionId")})': s
-    for s in subs
-}
+sub_options = {}
+for s in subs:
+    # Try multiple possible keys for name & id
+    sub_name = (
+        s.get("subscriptionName")
+        or s.get("name")
+        or s.get("displayName")
+        or "Subscription"
+    )
+    sub_id = s.get("subscriptionId") or s.get("id")
+
+    label = f"{sub_name} ({sub_id})"
+    sub_options[label] = s
 
 selected_sub_label = st.selectbox("Subscription", list(sub_options.keys()))
 selected_sub = sub_options[selected_sub_label]
 subscription_id = selected_sub.get("subscriptionId") or selected_sub.get("id")
+
+# After subs = get_subscriptions()
+st.sidebar.checkbox("Show debug data", key="debug_flag")
+
+if st.session_state.debug_flag:
+    st.subheader("🔍 Debug: Raw subscriptions")
+    st.json(subs)
 
 # 2. Plans
 st.subheader("2. Select Plan")
@@ -83,14 +99,26 @@ if not plans:
     st.error("No plans for this subscription.")
     st.stop()
 
-plan_options = {
-    f'{p.get("planName", "Unnamed Plan")} ({p.get("planId")})': p
-    for p in plans
-}
+plan_options = {}
+for p in plans:
+    plan_name = (
+        p.get("planName")
+        or p.get("name")
+        or p.get("plan_name")
+        or "Plan"
+    )
+    plan_id_value = p.get("planId") or p.get("id")
+
+    label = f"{plan_name} ({plan_id_value})"
+    plan_options[label] = p
 
 selected_plan_label = st.selectbox("Plan", list(plan_options.keys()))
 selected_plan = plan_options[selected_plan_label]
 plan_id = selected_plan.get("planId") or selected_plan.get("id")
+
+if st.session_state.debug_flag:
+    st.subheader("🔍 Debug: Raw plans")
+    st.json(plans)
 
 # 3. Lanes
 st.subheader("3. Select Lane")
