@@ -31,6 +31,13 @@ def get_lanes(subscription_id: str, plan_id: str):
     resp.raise_for_status()
     return resp.json()
 
+@st.cache_data(ttl=60)
+def get_lanes_cached(subscription_id: str, plan_id: str):
+    url = f"{BASE_URL}/v1/Lane/GetLanesForPlan/{subscription_id}/{plan_id}"
+    resp = requests.get(url, headers=HEADERS)
+    resp.raise_for_status()
+    return resp.json()
+
 # --- TEMP: Mock activities & tags while Activities endpoint is broken ---
 
 def mock_activities_for_lane(plan_id: str, lane_id: str):
@@ -122,13 +129,26 @@ if st.session_state.debug_flag:
 
 # 3. Lanes
 st.subheader("3. Select Lane")
-lanes = get_lanes(subscription_id, plan_id)
+
+lanes = []
+if "lanes" not in st.session_state:
+    st.session_state.lanes = []
+
+if st.button("Load lanes for this plan"):
+    try:
+        st.session_state.lanes = get_lanes_cached(subscription_id, plan_id)
+    except requests.HTTPError as e:
+        st.error(f"Failed to load lanes: {e}")
+        st.stop()
+
+lanes = st.session_state.lanes
+
 if not lanes:
-    st.warning("No lanes found in this plan.")
+    st.info("Click the button above to load lanes.")
     st.stop()
 
 lane_options = {
-    f'{l.get("laneName", "Unnamed Lane")} ({l.get("laneId")})': l
+    f'{l.get("laneName") or l.get("name") or "Lane"} ({l.get("laneId") or l.get("id")})': l
     for l in lanes
 }
 
