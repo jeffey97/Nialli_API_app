@@ -58,6 +58,29 @@ def get_lanes(subscription_id,plan_id: str):
         print(f"{idx}: {name}  (laneId={lid})")
     return data
 
+def get_activities(subscription_id: str, plan_id: str, skip: int = 0, take: int = 100):
+    url = f"{BASE_URL}/v1/Activity/GetActivitiesForPlan/{subscription_id}/{plan_id}/{skip}/{take}"
+    response = requests.get(url, headers=headers)
+
+    print("\n=== Activities for plan ===")
+    print("URL:", response.url)
+    print("Status Code:", response.status_code)
+    print("Raw Response:", response.text)
+
+    if response.status_code != 200:
+        # Log and return empty list so the rest of the script can continue
+        print("⚠️ Activities endpoint failed, returning empty list for now.")
+        return []
+
+    data = response.json()
+    for idx, act in enumerate(data):
+        desc = act.get("description") or act.get("activityName") or "<no name>"
+        lane_id = act.get("laneId")
+        act_id = act.get("activityId") or act.get("id")
+        print(f"{idx}: {desc}  (activityId={act_id}, laneId={lane_id})")
+    return data
+
+
 
 if __name__ == "__main__":
     subs = get_subscriptions()
@@ -82,7 +105,8 @@ if __name__ == "__main__":
             selected_plan = plans[0]
             plan_id = selected_plan.get("planId") or selected_plan.get("id")
             print(f"\nUsing plan ID: {plan_id}")
-            lanes = get_lanes(sub_id,plan_id)  
+            lanes = get_lanes(sub_id,plan_id)
+            activities = get_activities(sub_id, plan_id, skip=0, take=100)
 
         else:
             print("No plans found for this subscription.")
