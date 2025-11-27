@@ -1,4 +1,5 @@
 import requests
+from datetime import datetime, date
 
 BASE_URL = "https://nvpapi.nialli.com"  # test environment
 ACCESS_TOKEN="eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCIsImtpZCI6InVRTVFfUlBfcDVLcDRvdU81NFpDRSJ9.eyJhdXRoZW50aWNhdGVkZW1haWwiOiJtYXJrdXMuYW1hbGFuYXRoYW5AYWRpZGV2ZWxvcG1lbnRzLmNvbSIsImF1dGhlbnRpY2F0ZWQuZW1haWwiOiJtYXJrdXMuYW1hbGFuYXRoYW5AYWRpZGV2ZWxvcG1lbnRzLmNvbSIsImF1dGhlbnRpY2F0ZWQudXNlcmlkIjoiYXV0aDB8Njg2N2YxNzM4MDFmOTI0MzZiZTYxN2IzIiwiaXNzIjoiaHR0cHM6Ly9uaWFsbGktcHJvZC51cy5hdXRoMC5jb20vIiwic3ViIjoiYXV0aDB8Njg2N2YxNzM4MDFmOTI0MzZiZTYxN2IzIiwiYXVkIjoiaHR0cHM6Ly9udnBhcGkubmlhbGxpLmNvbS8iLCJpYXQiOjE3NjQxODY0MDAsImV4cCI6MTc2NDI3MjgwMCwiZ3R5IjoicGFzc3dvcmQiLCJhenAiOiJpRXg4cjZXTjJEenR1U3NpVjZNV2dJbGllREtCUnh3aiIsInBlcm1pc3Npb25zIjpbInN1YnNjcmlwdGlvbjpnZXQiXX0.Q42E5tjvTYEgvqOYQ6k5gA1V911MNvjCTi_XR-1CIfnFilff-nMKYjTlhP1A-f3BMoUS1oiexL33bR6scZFvT9q_lgCKU5nm5PDY1xN_YaISdgZJOByJ4mv9nvLs1UuqWUdibISbyCLn_7Q9DCm7g6gXaRyV3abAwiy_eI4dXVEN-h82QZKnoLmwjlpkDlqss2ZNJ8KH-IXYd9WHe34zKyqZlo8nTLk1FJBR3TvG1h1hhAJMsaQg3XESes6ZGPmtsuWPON25mDadc2fkE-mpINp1LYHFotqvkW4pKNSFZhTPY8Ojc2ObgSYOE0rHNTOae7UbZt3MjWvlrYkOL2LSmw"
@@ -72,12 +73,60 @@ def get_activities(subscription_id: str, plan_id: str, skip: int = 0, take: int 
         return []
 
     data = response.json()
-    for idx, act in enumerate(data):
+    
+    # Filter activities to only show those that happen today
+    today = date.today()
+    filtered_activities = []
+    
+    for act in data:
+        # Get start and end dates from the activity
+        start_date_str = act.get("startDate") or act.get("startDateTime")
+        end_date_str = act.get("endDate") or act.get("endDateTime")
+        
+        # Skip if dates are missing
+        if not start_date_str or not end_date_str:
+            continue
+        
+        # Parse dates (handle both date-only and datetime strings)
+        try:
+            # Try parsing as date first (YYYY-MM-DD)
+            if isinstance(start_date_str, str) and len(start_date_str) == 10:
+                start_date = datetime.strptime(start_date_str, "%Y-%m-%d").date()
+            elif isinstance(start_date_str, str):
+                # Try parsing as datetime and extract date
+                start_date = datetime.fromisoformat(start_date_str.replace('Z', '+00:00')).date()
+            else:
+                continue
+                
+            if isinstance(end_date_str, str) and len(end_date_str) == 10:
+                end_date = datetime.strptime(end_date_str, "%Y-%m-%d").date()
+            elif isinstance(end_date_str, str):
+                # Try parsing as datetime and extract date
+                end_date = datetime.fromisoformat(end_date_str.replace('Z', '+00:00')).date()
+            else:
+                continue
+        except (ValueError, AttributeError) as e:
+            print(f"⚠️ Could not parse dates for activity {act.get('activityId')}: {e}")
+            continue
+        
+        # Include activity if it overlaps with today
+        # Activity overlaps with today if: start_date <= today <= end_date
+        if start_date <= today <= end_date:
+            filtered_activities.append(act)
+    
+    print(f"\n=== Filtered Activities (happening today: {today}) ===")
+    print(f"Total activities fetched: {len(data)}")
+    print(f"Activities happening today: {len(filtered_activities)}")
+    
+    for idx, act in enumerate(filtered_activities):
         desc = act.get("description") or act.get("activityName") or "<no name>"
         lane_id = act.get("laneId")
         act_id = act.get("activityId") or act.get("id")
-        print(f"{idx}: {desc}  (activityId={act_id}, laneId={lane_id})")
-    return data
+        start_date_str = act.get("startDate") or act.get("startDateTime", "N/A")
+        end_date_str = act.get("endDate") or act.get("endDateTime", "N/A")
+        print(f"{idx}: {desc}  (activityId={act_id}, laneId={lane_id}, start={start_date_str}, end={end_date_str})")
+    
+    return filtered_activities
 
 
 
