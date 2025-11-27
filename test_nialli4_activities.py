@@ -1,5 +1,6 @@
 import requests
 from datetime import datetime, date
+import json
 
 BASE_URL = "https://nvpapi.nialli.com"  # test environment
 ACCESS_TOKEN="eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCIsImtpZCI6InVRTVFfUlBfcDVLcDRvdU81NFpDRSJ9.eyJhdXRoZW50aWNhdGVkZW1haWwiOiJtYXJrdXMuYW1hbGFuYXRoYW5AYWRpZGV2ZWxvcG1lbnRzLmNvbSIsImF1dGhlbnRpY2F0ZWQuZW1haWwiOiJtYXJrdXMuYW1hbGFuYXRoYW5AYWRpZGV2ZWxvcG1lbnRzLmNvbSIsImF1dGhlbnRpY2F0ZWQudXNlcmlkIjoiYXV0aDB8Njg2N2YxNzM4MDFmOTI0MzZiZTYxN2IzIiwiaXNzIjoiaHR0cHM6Ly9uaWFsbGktcHJvZC51cy5hdXRoMC5jb20vIiwic3ViIjoiYXV0aDB8Njg2N2YxNzM4MDFmOTI0MzZiZTYxN2IzIiwiYXVkIjoiaHR0cHM6Ly9udnBhcGkubmlhbGxpLmNvbS8iLCJpYXQiOjE3NjQxODY0MDAsImV4cCI6MTc2NDI3MjgwMCwiZ3R5IjoicGFzc3dvcmQiLCJhenAiOiJpRXg4cjZXTjJEenR1U3NpVjZNV2dJbGllREtCUnh3aiIsInBlcm1pc3Npb25zIjpbInN1YnNjcmlwdGlvbjpnZXQiXX0.Q42E5tjvTYEgvqOYQ6k5gA1V911MNvjCTi_XR-1CIfnFilff-nMKYjTlhP1A-f3BMoUS1oiexL33bR6scZFvT9q_lgCKU5nm5PDY1xN_YaISdgZJOByJ4mv9nvLs1UuqWUdibISbyCLn_7Q9DCm7g6gXaRyV3abAwiy_eI4dXVEN-h82QZKnoLmwjlpkDlqss2ZNJ8KH-IXYd9WHe34zKyqZlo8nTLk1FJBR3TvG1h1hhAJMsaQg3XESes6ZGPmtsuWPON25mDadc2fkE-mpINp1LYHFotqvkW4pKNSFZhTPY8Ojc2ObgSYOE0rHNTOae7UbZt3MjWvlrYkOL2LSmw"
@@ -74,17 +75,45 @@ def get_activities(subscription_id: str, plan_id: str, skip: int = 0, take: int 
 
     data = response.json()
     
+    # Debug: Print structure of first activity to see all available fields
+    if data:
+        print("\n=== DEBUG: First activity structure ===")
+        print(json.dumps(data[0], indent=2, default=str))
+        print("\n=== DEBUG: All keys in first activity ===")
+        print(list(data[0].keys()))
+    
     # Filter activities to only show those that happen today
     today = date.today()
     filtered_activities = []
+    activities_with_null_dates = []
     
     for act in data:
-        # Get start and end dates from the activity
-        start_date_str = act.get("startDate") or act.get("startDateTime")
-        end_date_str = act.get("endDate") or act.get("endDateTime")
+        # Try multiple possible date field names
+        start_date_str = (act.get("startDate") or 
+                         act.get("startDateTime") or 
+                         act.get("scheduledStartDate") or
+                         act.get("plannedStartDate") or
+                         act.get("actualStartDate") or
+                         act.get("start") or
+                         act.get("dateStart") or
+                         act.get("fromDate"))
         
-        # Skip if dates are missing
+        end_date_str = (act.get("endDate") or 
+                       act.get("endDateTime") or 
+                       act.get("scheduledEndDate") or
+                       act.get("plannedEndDate") or
+                       act.get("actualEndDate") or
+                       act.get("end") or
+                       act.get("dateEnd") or
+                       act.get("toDate"))
+        
+        # Track activities with null dates for debugging
         if not start_date_str or not end_date_str:
+            activities_with_null_dates.append({
+                "activityId": act.get("activityId") or act.get("id"),
+                "description": act.get("description") or act.get("activityName"),
+                "all_keys": list(act.keys())
+            })
             continue
         
         # Parse dates (handle both date-only and datetime strings)
@@ -117,13 +146,21 @@ def get_activities(subscription_id: str, plan_id: str, skip: int = 0, take: int 
     print(f"\n=== Filtered Activities (happening today: {today}) ===")
     print(f"Total activities fetched: {len(data)}")
     print(f"Activities happening today: {len(filtered_activities)}")
+    print(f"Activities with null/missing dates: {len(activities_with_null_dates)}")
+    
+    # Print info about activities with null dates
+    if activities_with_null_dates:
+        print("\n=== Activities with null dates (first 5) ===")
+        for idx, act_info in enumerate(activities_with_null_dates[:5]):
+            print(f"{idx}: {act_info['description']} (ID: {act_info['activityId']})")
+            print(f"   Available keys: {act_info['all_keys']}")
     
     for idx, act in enumerate(filtered_activities):
         desc = act.get("description") or act.get("activityName") or "<no name>"
         lane_id = act.get("laneId")
         act_id = act.get("activityId") or act.get("id")
-        start_date_str = act.get("startDate") or act.get("startDateTime", "N/A")
-        end_date_str = act.get("endDate") or act.get("endDateTime", "N/A")
+        start_date_str = act.get("startDate") or act.get("startDateTime") or act.get("scheduledStartDate") or "N/A"
+        end_date_str = act.get("endDate") or act.get("endDateTime") or act.get("scheduledEndDate") or "N/A"
         print(f"{idx}: {desc}  (activityId={act_id}, laneId={lane_id}, start={start_date_str}, end={end_date_str})")
     
     return filtered_activities
