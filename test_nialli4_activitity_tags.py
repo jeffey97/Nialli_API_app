@@ -111,7 +111,7 @@ if __name__ == "__main__":
 
         # For now, just automatically pick the first plan
         if plans:
-            selected_plan = plans[0]
+            selected_plan = plans[1]
             plan_id = selected_plan.get("planId") or selected_plan.get("id")
             print(f"\nUsing plan ID: {plan_id}")
             lanes = get_lanes(sub_id,plan_id)
