@@ -75,12 +75,35 @@ def get_activities(subscription_id: str, plan_id: str, skip: int = 0, take: int 
 
     data = response.json()
     
-    # Debug: Print structure of first activity to see all available fields
+    # Debug: Discover all date-related fields in the response
     if data:
         print("\n=== DEBUG: First activity structure ===")
         print(json.dumps(data[0], indent=2, default=str))
         print("\n=== DEBUG: All keys in first activity ===")
         print(list(data[0].keys()))
+        
+        # Find all keys that might contain dates (look for 'date' in key name or date-like values)
+        print("\n=== DEBUG: Scanning for date-related fields ===")
+        date_fields = {}
+        for act in data[:5]:  # Check first 5 activities
+            for key, value in act.items():
+                # Check if key name suggests a date
+                if any(word in key.lower() for word in ['date', 'time', 'start', 'end', 'from', 'to', 'scheduled', 'planned', 'actual']):
+                    if key not in date_fields:
+                        date_fields[key] = []
+                    date_fields[key].append(value)
+                # Or check if value looks like a date string
+                elif isinstance(value, str) and len(value) >= 10:
+                    # Check for ISO date patterns like "2024-11-27" or "2024-11-27T..."
+                    if value[4:5] == '-' and value[7:8] == '-':
+                        if key not in date_fields:
+                            date_fields[key] = []
+                        date_fields[key].append(value)
+        
+        print("Potential date fields found:")
+        for field_name, sample_values in date_fields.items():
+            unique_values = list(set(str(v) for v in sample_values[:3]))  # Show up to 3 unique samples
+            print(f"  '{field_name}': {unique_values}")
     
     # Filter activities to only show those that happen today
     today = date.today()
