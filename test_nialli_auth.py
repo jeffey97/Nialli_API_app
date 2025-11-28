@@ -1,5 +1,5 @@
 # test_auth_client.py
-from nialli_client import get_subscriptions
+from ui.nialli_client import get_subscriptions
 
 subs = get_subscriptions()
 print(subs)

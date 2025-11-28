@@ -2,8 +2,6 @@ import os
 import time
 from datetime import date, datetime
 import json
-
-
 import requests
 import streamlit as st
 from nialli_client import (
