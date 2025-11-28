@@ -198,117 +198,64 @@ st.sidebar.write(f"Last status: {api_stats['last_status']}")
 if api_stats["last_error"]:
     st.sidebar.error(f"Last error: {api_stats['last_error']}")
 
-# --------------------------------------------------
+st.title("Nialli MVP – Production Data")
+
 # 1. Subscriptions
-# --------------------------------------------------
-
-st.subheader("1. Select Subscription")
-
-try:
-    subs = get_subscriptions()
-except requests.HTTPError as e:
-    st.error(f"Failed to load subscriptions: {e}")
-    st.stop()
-
+subs = get_subscriptions()
 if not subs:
     st.error("No subscriptions found.")
     st.stop()
 
 sub_options = {}
 for s in subs:
-    # Try multiple possible keys for name & id
-    sub_name = (
-        s.get("subscriptionName")
-        or s.get("name")
-        or s.get("displayName")
-        or "Subscription"
-    )
+    sub_name = s.get("subscriptionName") or s.get("name") or "Subscription"
     sub_id = s.get("subscriptionId") or s.get("id")
-
-    label = f"{sub_name} ({sub_id})"
-    sub_options[label] = s
+    sub_options[f"{sub_name} ({sub_id})"] = s
 
 selected_sub_label = st.selectbox("Subscription", list(sub_options.keys()))
 selected_sub = sub_options[selected_sub_label]
 subscription_id = selected_sub.get("subscriptionId") or selected_sub.get("id")
 
-if st.session_state.debug_flag:
-    st.subheader("🔍 Debug: Raw subscriptions")
-    st.json(subs)
-
-# --------------------------------------------------
 # 2. Plans
-# --------------------------------------------------
-
-st.subheader("2. Select Plan")
-
-try:
-    plans = get_plans(subscription_id)
-except requests.HTTPError as e:
-    st.error(f"Failed to load plans: {e}")
-    st.stop()
-
+plans = get_plans(subscription_id)
 if not plans:
     st.error("No plans for this subscription.")
     st.stop()
 
 plan_options = {}
 for p in plans:
-    plan_name = p.get("planName") or p.get("name") or p.get("plan_name") or "Plan"
-    plan_id_value = p.get("planId") or p.get("id")
-
-    label = f"{plan_name} ({plan_id_value})"
-    plan_options[label] = p
+    plan_name = p.get("planName") or p.get("name") or "Plan"
+    plan_id_val = p.get("planId") or p.get("id")
+    plan_options[f"{plan_name} ({plan_id_val})"] = p
 
 selected_plan_label = st.selectbox("Plan", list(plan_options.keys()))
 selected_plan = plan_options[selected_plan_label]
 plan_id = selected_plan.get("planId") or selected_plan.get("id")
 
-if st.session_state.debug_flag:
-    st.subheader("🔍 Debug: Raw plans")
-    st.json(plans)
-
-# --------------------------------------------------
-# 3. Lanes
-# --------------------------------------------------
-
-st.subheader("3. Select Lane")
-
-# Ensure lanes exist in session_state
+# 3. Lanes (with button, like you had)
+st.subheader("Select lane")
 if "lanes" not in st.session_state:
     st.session_state.lanes = []
 
-# Button explicitly triggers API (which is cached)
 if st.button("Load lanes for this plan"):
-    try:
-        st.session_state.lanes = get_lanes(subscription_id, plan_id)
-    except requests.HTTPError as e:
-        st.error(f"Failed to load lanes: {e}")
-        st.stop()
+    st.session_state.lanes = get_lanes(subscription_id, plan_id)
 
 lanes = st.session_state.lanes
 
 if not lanes:
-    st.info("Click the button above to load lanes.")
+    st.info("Click the button to load lanes.")
     st.stop()
 
-lane_options = {
-    f'{l.get("laneName") or l.get("name") or "Lane"} ({l.get("laneId") or l.get("id")})': l
-    for l in lanes
-}
+lane_options = {}
+for l in lanes:
+    lane_name = l.get("laneName") or l.get("name") or "Lane"
+    lane_id_val = l.get("laneId") or l.get("id")
+    lane_options[f"{lane_name} ({lane_id_val})"] = l
 
 selected_lane_label = st.selectbox("Lane", list(lane_options.keys()))
 selected_lane = lane_options[selected_lane_label]
 lane_id = selected_lane.get("laneId") or selected_lane.get("id")
-lane_name = selected_lane.get("laneName") or selected_lane.get("name", "Unnamed Lane")
-
-if st.session_state.debug_flag:
-    st.subheader("🔍 Debug: Raw lanes")
-    st.json(lanes)
-
-# --------------------------------------------------
-# 4. Activities (real, from plan endpoint, filtered by lane)
-# --------------------------------------------------
+lane_name = selected_lane.get("laneName") or selected_lane.get("name") or "Lane"
 
 # --------------------------------------------------
 # 4. Activities (real, from plan endpoint, filtered by lane)
