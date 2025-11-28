@@ -6,6 +6,15 @@ import json
 
 import requests
 import streamlit as st
+from nialli_client import (
+    get_subscriptions,
+    get_plans,
+    get_lanes,
+    get_activities,
+    get_activity_tags_for_plan,
+)
+
+
 
 # -------------------------------------------------------------------
 # Config
