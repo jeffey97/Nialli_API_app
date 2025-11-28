@@ -13,15 +13,11 @@ from nialli_client import (
     get_activities,
     get_activity_tags_for_plan,
 )
-
-
-
 # -------------------------------------------------------------------
 # Config
 # -------------------------------------------------------------------
 
 st.set_page_config(page_title="Nialli MVP Viewer", layout="wide")
-
 # BASE_URL and ACCESS_TOKEN are stored in .streamlit/secrets.toml
 # Example:
 # NIALLI_API_BASE_URL = "https://nvpapi.nialli.com"
@@ -111,40 +107,38 @@ def nialli_get(path: str, max_retries: int = 5):
     stats["last_error"] = err_msg
     raise requests.HTTPError(err_msg)
 
-
 # -------------------------------------------------------------------
 # Cached endpoint wrappers
 # -------------------------------------------------------------------
 
-
 @st.cache_data(ttl=600)  # 10 minutes
-def get_subscriptions():
+def get_subscriptions_cached():
     """
     Get all subscriptions for the current user.
     Cached because subscriptions rarely change minute-to-minute.
     """
     print("👉 [API] get_subscriptions() called (cache miss)")
-    return nialli_get("/v1/Subscription/GetSubscriptionsForUser")
+    return get_subscriptions()
 
 
 @st.cache_data(ttl=600)  # 10 minutes
-def get_plans(subscription_id: str):
+def get_plans_cached(subscription_id: str):
     """
     Get plans for a given subscription.
     Cached per subscription ID.
     """
     print(f"👉 [API] get_plans({subscription_id}) called (cache miss)")
-    return nialli_get(f"/v1/Plan/GetPlanInfoForSubscription/{subscription_id}")
+    return get_plans(subscription_id)
 
 
 @st.cache_data(ttl=300)  # 5 minutes
-def get_lanes(subscription_id: str, plan_id: str):
+def get_lanes_cached(subscription_id: str, plan_id: str):
     """
     Get lanes for a given plan within a subscription.
     Cached per (subscription_id, plan_id).
     """
     print(f"👉 [API] get_lanes({subscription_id}, {plan_id}) called (cache miss)")
-    return nialli_get(f"/v1/Lane/GetLanesForPlan/{subscription_id}/{plan_id}")
+    return get_lanes(subscription_id,plan_id)
 
 
 
@@ -201,7 +195,7 @@ if api_stats["last_error"]:
 st.title("Nialli MVP – Production Data")
 
 # 1. Subscriptions
-subs = get_subscriptions()
+subs = get_subscriptions_cached()
 if not subs:
     st.error("No subscriptions found.")
     st.stop()
@@ -217,7 +211,7 @@ selected_sub = sub_options[selected_sub_label]
 subscription_id = selected_sub.get("subscriptionId") or selected_sub.get("id")
 
 # 2. Plans
-plans = get_plans(subscription_id)
+plans = get_plans_cached(subscription_id)
 if not plans:
     st.error("No plans for this subscription.")
     st.stop()
@@ -238,7 +232,7 @@ if "lanes" not in st.session_state:
     st.session_state.lanes = []
 
 if st.button("Load lanes for this plan"):
-    st.session_state.lanes = get_lanes(subscription_id, plan_id)
+    st.session_state.lanes = get_lanes_cached(subscription_id, plan_id)
 
 lanes = st.session_state.lanes
 
