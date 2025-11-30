@@ -7,6 +7,16 @@ import json
 import requests
 import streamlit as st
 
+
+def _parse_date_only(value):
+    if not value:
+        return None
+    s = str(value)
+    try:
+        return datetime.strptime(s[:10], "%Y-%m-%d").date()
+    except ValueError:
+        return None
+
 # --- Ensure project root is on sys.path so we can import nialli_client.py ---
 # app_cached.py is in /Users/.../Nialli_API_app/ui/app_cached.py
 # project root is /Users/.../Nialli_API_app
@@ -24,18 +34,6 @@ from nialli_client import (
 )
 
 # -------------------------------------------------------------------
-# Config
-# -------------------------------------------------------------------
-
-st.set_page_config(page_title="Nialli MVP Viewer", layout="wide")
-BASE_URL = st.secrets["NIALLI_API_BASE_URL"]
-ACCESS_TOKEN = st.secrets["NIALLI_ACCESS_TOKEN"]
-
-HEADERS = {
-    "Authorization": f"Bearer {ACCESS_TOKEN}"
-}
-
-# -------------------------------------------------------------------
 # API diagnostics (stored in session_state)
 # -------------------------------------------------------------------
 
@@ -47,70 +45,6 @@ if "api_stats" not in st.session_state:
         "last_status": None,
         "last_error": None,
     }
-
-# -------------------------------------------------------------------
-# Low-level HTTP helper with rate-limit handling
-# -------------------------------------------------------------------
-
-
-def nialli_get(path: str, max_retries: int = 5):
-    """
-    Wrapper around requests.get for Nialli API.
-
-    - Prefixes BASE_URL
-    - Adds Authorization headers
-    - Handles 429 (Too Many Requests) with backoff
-    - Raises for non-429 HTTP errors
-    - Updates simple diagnostics in st.session_state.api_stats
-    """
-    url = f"{BASE_URL}{path}"
-    stats = st.session_state.api_stats
-    stats["last_path"] = path
-
-    for attempt in range(max_retries):
-        stats["total_calls"] += 1
-        try:
-            resp = requests.get(url, headers=HEADERS)
-            stats["last_status"] = resp.status_code
-        except Exception as ex:
-            stats["last_error"] = str(ex)
-            raise
-
-        # Handle rate limiting explicitly
-        if resp.status_code == 429:
-            stats["total_429s"] += 1
-
-            retry_after = resp.headers.get("Retry-After")
-            if retry_after is not None:
-                try:
-                    wait = int(retry_after)
-                except ValueError:
-                    wait = 2 ** attempt
-            else:
-                # Exponential backoff: 1, 2, 4, 8, 16...
-                wait = 2 ** attempt
-
-            st.warning(
-                f"Rate limited by Nialli (429). "
-                f"Retrying in {wait} seconds... (attempt {attempt + 1}/{max_retries})"
-            )
-            time.sleep(wait)
-            continue
-
-        # For any non-429 error, raise as usual
-        try:
-            resp.raise_for_status()
-        except requests.HTTPError as http_err:
-            stats["last_error"] = str(http_err)
-            raise
-
-        stats["last_error"] = None
-        return resp.json()
-
-    # If we get here, we never got a non-429 success response
-    err_msg = "Too many 429 responses from Nialli; giving up after retries."
-    stats["last_error"] = err_msg
-    raise requests.HTTPError(err_msg)
 
 # -------------------------------------------------------------------
 # Cached endpoint wrappers
@@ -149,45 +83,45 @@ def get_lanes_cached(subscription_id: str, plan_id: str):
 @st.cache_data(ttl=300)  # 5 minutes cache
 def get_activities_cached(subscription_id: str, plan_id: str):
     """
-    Get ALL activities for a given plan.
+    Get ALL activities for a given plan as a flat list.
     Uses the high-level nialli_client.get_activities().
+    Unwraps dict payloads into a list if needed.
     """
     print(f"👉 [API] get_activities({subscription_id}, {plan_id}) called (cache miss)")
-    # grab a reasonably large page; adjust if needed
-    return get_activities(subscription_id, plan_id, skip=0, take=100)
+    raw = get_activities(subscription_id, plan_id, skip=0, take=100)
+    if isinstance(raw, list):
+        return raw
+    if isinstance(raw, dict):
+        return (
+            raw.get("activities")
+            or raw.get("items")
+            or raw.get("data")
+            or raw.get("value")
+            or []
+        )
+    return []
 
+@st.cache_data(ttl=300)  # 5 minutes
+def get_activity_tags_cached(subscription_id: str, plan_id: str):
+    """
+    Get all activity-tag rows for a given plan.
+    Each row links activityId <-> tagLaneId/tagDay/etc.
+    """
+    print(f"👉 [API] get_activity_tags_for_plan({subscription_id}, {plan_id}) called (cache miss)")
+    return get_activity_tags_for_plan(subscription_id, plan_id)
 
 
 @st.cache_data(ttl=120)
 def get_activities_for_plan(subscription_id: str, plan_id: str, skip: int, take: int):
     """
-    Debug version: calls Activities endpoint directly and shows 400 response body.
-    Once things work, we can wire this back through nialli_get().
+    Debug version: calls Activities endpoint via nialli_client and returns raw payload.
     """
     # be safe: clamp take to 100 in case the API has a max
     if take > 100:
         take = 100
 
-    path = f"/v1/Activity/GetActivitiesForPlan/{subscription_id}/{plan_id}/{skip}/{take}"
-    url = f"{BASE_URL}{path}"
-    print("👉 [API] get_activities_for_plan calling:", url)
-
-    resp = requests.get(url, headers=HEADERS)
-
-    # If it's a 400, show the explanation from Nialli
-    if resp.status_code == 400:
-        try:
-            body = resp.json()
-        except Exception:
-            body = resp.text
-
-        st.error("Activities endpoint returned 400 Bad Request.")
-        st.code(str(body), language="json")
-        # Still raise so the UI "Failed to load activities" logic works
-        resp.raise_for_status()
-
-    resp.raise_for_status()
-    return resp.json()
+    print(f"👉 [API DEBUG] get_activities_for_plan({subscription_id}, {plan_id}, skip={skip}, take={take})")
+    return get_activities(subscription_id, plan_id, skip=skip, take=take)
 
 # -------------------------------------------------------------------
 # Streamlit UI
@@ -267,39 +201,101 @@ selected_lane = lane_options[selected_lane_label]
 lane_id = selected_lane.get("laneId") or selected_lane.get("id")
 lane_name = selected_lane.get("laneName") or selected_lane.get("name") or "Lane"
 
-
 st.subheader("Lane activities (from Nialli)")
 
-if st.button("Load activities for this lane"):
+if st.button("Load activities for this lane", key="lane_activities_table_btn"):
     # 1) Fetch ALL activities for the plan
     activities = get_activities_cached(subscription_id, plan_id)
 
-    # 2) Filter by laneId
-    lane_activities = [
-        a for a in activities
-        if a.get("laneId") == lane_id
-    ]
+    # 1b) Try to fetch tags; if API errors, don't crash
+    try:
+        activity_tags = get_activity_tags_cached(subscription_id, plan_id)
+    except requests.HTTPError as e:
+        st.error("Could not load activity tags for this plan. "
+                 "The ActivityTag endpoint returned an error.")
+        if st.session_state.get("debug_flag"):
+            st.exception(e)
+        activity_tags = []
+
+    if not activity_tags:
+        st.info(
+            "No activity tags available (or tag endpoint failed), "
+            "so lane-based filtering via tags is not possible right now."
+        )
+        st.stop()
+
+
+    # Debug: inspect payloads
+    if st.session_state.get("debug_flag"):
+        st.write(f"🔍 Debug: total activities returned for plan: {len(activities)}")
+        if activities:
+            st.write("🔍 Debug: first activity object:")
+            st.json(activities[0])
+
+        st.write(f"🔍 Debug: total activity-tags returned for plan: {len(activity_tags)}")
+        if activity_tags:
+            st.write("🔍 Debug: first activity-tag object:")
+            st.json(activity_tags[0])
+
+    # 2) Build activityId -> activity map
+    activities_by_id = {}
+    for a in activities:
+        if not isinstance(a, dict):
+            continue
+        aid = a.get("activityId") or a.get("id")
+        if aid:
+            activities_by_id[str(aid)] = a
+
+    # 3) From ActivityTags, pick those for this lane (optionally filter by date later)
+    lane_activity_ids = set()
+    today = date.today()  # if you want to filter by "today" later
+
+    for t in activity_tags:
+        if not isinstance(t, dict):
+            continue
+
+        # lane from ActivityTag schema
+        tag_lane = t.get("tagLaneId") or t.get("laneId")
+        if str(tag_lane) != str(lane_id):
+            continue
+
+        # OPTIONAL: filter by today using tagDay/day
+        #tag_day_raw = t.get("tagDay") or t.get("day")
+        #tag_day = _parse_date_only(tag_day_raw)
+        #if tag_day != today:
+             #continue
+
+        act_id = t.get("activityId")
+        if act_id:
+            lane_activity_ids.add(str(act_id))
+
+    if st.session_state.get("debug_flag"):
+        st.write("🔍 Debug: activityIds linked to this lane via tags:", lane_activity_ids)
+
+    # 4) Build the final list of activities for this lane
+    lane_activities = []
+    for aid in lane_activity_ids:
+        act = activities_by_id.get(aid)
+        if act:
+            lane_activities.append(act)
 
     if not lane_activities:
-        st.info(f"No activities found for lane **{lane_name}**.")
+        st.info(f"No activities found for lane **{lane_name}** via tags.")
     else:
-        # 3) Flatten into a friendly table
+        # 5) Flatten into a friendly table
         rows = []
         for a in lane_activities:
             rows.append({
                 "Activity ID": a.get("activityId") or a.get("id"),
-                "Lane ID": a.get("laneId"),
                 "Description": a.get("description") or a.get("activityName") or a.get("name"),
-                "Status": a.get("status") or a.get("activityStatus") or "",
-                "Other": str(a),  # full raw dict as string, for debugging / later parsing
+                # laneId may still be null on the activity itself; lane is defined by the tag
+                "Lane ID (from selection)": lane_id,
             })
 
         df = pd.DataFrame(rows)
 
-        st.write(f"Found **{len(df)}** activities in lane **{lane_name}**")
+        st.write(f"Found **{len(df)}** activities in lane **{lane_name}** (via tags)")
         st.dataframe(df, use_container_width=True)
-
-        # 4) CSV download for Power BI / Excel
         csv_bytes = df.to_csv(index=False).encode("utf-8")
         st.download_button(
             label="Download lane activities as CSV",
@@ -325,7 +321,7 @@ with col_take:
         "Take (page size)", min_value=1, max_value=500, step=50, value=200
     )
 
-if st.button("Load activities for this lane"):
+if st.button("Load activities for this lane",key="lane_activities_debug_btn"):
     try:
         # Fetch activities for the whole plan (paginated)
         raw = get_activities_for_plan(subscription_id, plan_id, int(skip), int(take))
@@ -446,4 +442,3 @@ if st.button("Load activities for this lane"):
                 st.json(act)
 else:
     st.info("Click the button above to load activities for the selected lane.")
-
