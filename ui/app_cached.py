@@ -1,26 +1,33 @@
 import os
+import sys
 import time
 from datetime import date, datetime
+import pandas as pd
 import json
 import requests
 import streamlit as st
+
+# --- Ensure project root is on sys.path so we can import nialli_client.py ---
+# app_cached.py is in /Users/.../Nialli_API_app/ui/app_cached.py
+# project root is /Users/.../Nialli_API_app
+ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if ROOT_DIR not in sys.path:
+    sys.path.insert(0, ROOT_DIR)
+
 from nialli_client import (
     get_subscriptions,
     get_plans,
     get_lanes,
     get_activities,
     get_activity_tags_for_plan,
+    get_tags_for_activity,
 )
+
 # -------------------------------------------------------------------
 # Config
 # -------------------------------------------------------------------
 
 st.set_page_config(page_title="Nialli MVP Viewer", layout="wide")
-# BASE_URL and ACCESS_TOKEN are stored in .streamlit/secrets.toml
-# Example:
-# NIALLI_API_BASE_URL = "https://nvpapi.nialli.com"
-# NIALLI_ACCESS_TOKEN = "your_real_token_here"
-
 BASE_URL = st.secrets["NIALLI_API_BASE_URL"]
 ACCESS_TOKEN = st.secrets["NIALLI_ACCESS_TOKEN"]
 
@@ -139,6 +146,17 @@ def get_lanes_cached(subscription_id: str, plan_id: str):
     return get_lanes(subscription_id,plan_id)
 
 
+@st.cache_data(ttl=300)  # 5 minutes cache
+def get_activities_cached(subscription_id: str, plan_id: str):
+    """
+    Get ALL activities for a given plan.
+    Uses the high-level nialli_client.get_activities().
+    """
+    print(f"👉 [API] get_activities({subscription_id}, {plan_id}) called (cache miss)")
+    # grab a reasonably large page; adjust if needed
+    return get_activities(subscription_id, plan_id, skip=0, take=100)
+
+
 
 @st.cache_data(ttl=120)
 def get_activities_for_plan(subscription_id: str, plan_id: str, skip: int, take: int):
@@ -248,6 +266,49 @@ selected_lane_label = st.selectbox("Lane", list(lane_options.keys()))
 selected_lane = lane_options[selected_lane_label]
 lane_id = selected_lane.get("laneId") or selected_lane.get("id")
 lane_name = selected_lane.get("laneName") or selected_lane.get("name") or "Lane"
+
+
+st.subheader("Lane activities (from Nialli)")
+
+if st.button("Load activities for this lane"):
+    # 1) Fetch ALL activities for the plan
+    activities = get_activities_cached(subscription_id, plan_id)
+
+    # 2) Filter by laneId
+    lane_activities = [
+        a for a in activities
+        if a.get("laneId") == lane_id
+    ]
+
+    if not lane_activities:
+        st.info(f"No activities found for lane **{lane_name}**.")
+    else:
+        # 3) Flatten into a friendly table
+        rows = []
+        for a in lane_activities:
+            rows.append({
+                "Activity ID": a.get("activityId") or a.get("id"),
+                "Lane ID": a.get("laneId"),
+                "Description": a.get("description") or a.get("activityName") or a.get("name"),
+                "Status": a.get("status") or a.get("activityStatus") or "",
+                "Other": str(a),  # full raw dict as string, for debugging / later parsing
+            })
+
+        df = pd.DataFrame(rows)
+
+        st.write(f"Found **{len(df)}** activities in lane **{lane_name}**")
+        st.dataframe(df, use_container_width=True)
+
+        # 4) CSV download for Power BI / Excel
+        csv_bytes = df.to_csv(index=False).encode("utf-8")
+        st.download_button(
+            label="Download lane activities as CSV",
+            data=csv_bytes,
+            file_name=f"lane_{lane_name.replace(' ', '_')}_activities.csv",
+            mime="text/csv",
+        )
+else:
+    st.info("Click the button above to load activities for this lane.")
 
 # --------------------------------------------------
 # 4. Activities (real, from plan endpoint, filtered by lane)

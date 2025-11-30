@@ -46,7 +46,9 @@ def get_lanes(subscription_id: str, plan_id: str):
     return resp.json()
 
 
-def get_activities(subscription_id: str, plan_id: str, skip: int = 0, take: int = 200):
+def get_activities(subscription_id: str, plan_id: str, skip: int = 0, take: int = 100):
+    if take > 100:
+        take = 100
     url = f"{BASE_URL}/v1/Activity/GetActivitiesForPlan/{subscription_id}/{plan_id}/{skip}/{take}"
     resp = _get_with_auto_refresh(url)
     return resp.json()
